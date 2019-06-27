@@ -40,6 +40,29 @@ export class OneDriveLargeFileUploadTask extends LargeFileUploadTask {
 	private static DEFAULT_UPLOAD_PATH: string = "/";
 
 	/**
+	 * @private
+	 * @static
+	 * Constructs the create session url for Onedrive
+	 * @param {string} fileName - The name of the file
+	 * @param {path} [path = OneDriveLargeFileUploadTask.DEFAULT_UPLOAD_PATH] - The path for the upload
+	 * @returns The constructed create session url
+	 */
+	private static constructCreateSessionUrl(fileName: string, path: string = OneDriveLargeFileUploadTask.DEFAULT_UPLOAD_PATH): string {
+		fileName = fileName.trim();
+		path = path.trim();
+		if (path === "") {
+			path = "/";
+		}
+		if (path[0] !== "/") {
+			path = `/${path}`;
+		}
+		if (path[path.length - 1] !== "/") {
+			path = `${path}/`;
+		}
+		return encodeURI(`/me/drive/root:${path}${fileName}:/createUploadSession`);
+	}
+
+	/**
 	 * @public
 	 * @static
 	 * @async
@@ -53,21 +76,18 @@ export class OneDriveLargeFileUploadTask extends LargeFileUploadTask {
 		const name: string = options.fileName;
 		let content;
 		let size;
-		switch (file.constructor.name) {
-			case "Blob":
-				content = new File([file as Blob], name);
-				size = content.size;
-				break;
-			case "File":
-				content = file as File;
-				size = content.size;
-				break;
-			case "Buffer":
-				const b = file as Buffer;
-				size = b.byteLength - b.byteOffset;
-				content = b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
-				break;
+		if (file instanceof Blob) {
+			content = new File([file as Blob], name);
+			size = content.size;
+		} else if (file instanceof File) {
+			content = file as File;
+			size = content.size;
+		} else if (file instanceof Buffer) {
+			const b = file as Buffer;
+			size = b.byteLength - b.byteOffset;
+			content = b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
 		}
+
 		try {
 			const requestUrl = OneDriveLargeFileUploadTask.constructCreateSessionUrl(options.fileName, options.path);
 			const session = await OneDriveLargeFileUploadTask.createUploadSession(client, requestUrl, options.fileName);
@@ -88,29 +108,6 @@ export class OneDriveLargeFileUploadTask extends LargeFileUploadTask {
 	/**
 	 * @public
 	 * @static
-	 * Constructs the create session url for Onedrive
-	 * @param {string} fileName - The name of the file
-	 * @param {path} [path = OneDriveLargeFileUploadTask.DEFAULT_UPLOAD_PATH] - The path for the upload
-	 * @returns The constructed create session url
-	 */
-	public static constructCreateSessionUrl(fileName: string, path: string = OneDriveLargeFileUploadTask.DEFAULT_UPLOAD_PATH): string {
-		fileName = fileName.trim();
-		path = path.trim();
-		if (path === "") {
-			path = "/";
-		}
-		if (path[0] !== "/") {
-			path = `/${path}`;
-		}
-		if (path[path.length - 1] !== "/") {
-			path = `${path}/`;
-		}
-		return encodeURI(`/me/drive/root:${path}${fileName}:/createUploadSession`);
-	}
-
-	/**
-	 * @public
-	 * @static
 	 * @async
 	 * Makes request to the server to create an upload session
 	 * @param {Client} client - The GraphClient instance
@@ -126,12 +123,7 @@ export class OneDriveLargeFileUploadTask extends LargeFileUploadTask {
 			},
 		};
 		try {
-			const session = await client.api(requestUrl).post(payload);
-			const largeFileUploadSession: LargeFileUploadSession = {
-				url: session.uploadUrl,
-				expiry: new Date(session.expirationDateTime),
-			};
-			return largeFileUploadSession;
+			return super.createUploadSession(client, requestUrl, payload);
 		} catch (err) {
 			throw err;
 		}
